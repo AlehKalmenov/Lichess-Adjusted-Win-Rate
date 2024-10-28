@@ -37,4 +37,4 @@ function calculateAndDisplayAdjustedWinRate() {
 }
 
 // Set up an interval to repeatedly calculate and display adjusted win rates
-setInterval(calculateAndDisplayAdjustedWinRate, 1000); // Run every second
+setInterval(calculateAndDisplayAdjustedWinRate, 300); // Run every second
