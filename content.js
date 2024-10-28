@@ -42,16 +42,18 @@ function checkBoardOrientation() {
 function calculateAndSortByCustomMetric() {
     const sliderElement = document.getElementById('ln-slider');
     const exponentSliderElement = document.getElementById('exponent-slider');
+    const winrateOffsetSliderElement = document.getElementById('winrate-offset-slider');
     const sortingModeElement = document.getElementById('sorting-mode-slider');
 
     // Check if the sliders and sorting mode elements are present
-    if (!sliderElement || !exponentSliderElement || !sortingModeElement) {
+    if (!sliderElement || !exponentSliderElement || !winrateOffsetSliderElement || !sortingModeElement) {
         console.warn("Sliders not initialized yet.");
         return;
     }
 
     const sliderValue = parseFloat(sliderElement.value);
     const exponentSliderValue = parseFloat(exponentSliderElement.value);
+    const winrateOffset = parseFloat(winrateOffsetSliderElement.value);
     const sortingMode = sortingModeElement.value;
     const moveRows = Array.from(document.querySelectorAll('.moves tbody tr[data-uci]'));
 
@@ -75,28 +77,45 @@ function calculateAndSortByCustomMetric() {
         const blackPercentage = parseFloat(blackPercentageText);
         const thirdNumber = parseFloat(thirdNumberText);
 
-        // Calculate adjusted win rate based on sorting mode
-        let adjustedWinRate;
-        let metricToSortBy;
+// Calculate adjusted win rate and metric to sort by based on sorting mode
+let adjustedWinRate;
+let metricToSortBy;
 
-        if (sortingMode === 'default') {
-            metricToSortBy = thirdNumber;
-        } else if (sortingMode === 'white') {
-            adjustedWinRate = winPercentage + drawPercentage / 2;
-            metricToSortBy = adjustedWinRate;
-        } else if (sortingMode === 'black') {
-            adjustedWinRate = blackPercentage + drawPercentage / 2;
-            metricToSortBy = adjustedWinRate;
-        } else if (sortingMode === 'white-alternating') {
-            adjustedWinRate = winPercentage + drawPercentage / 2;
-            metricToSortBy = currentTurnIsWhite ? adjustedWinRate : thirdNumber;
-        } else if (sortingMode === 'black-alternating') {
-            adjustedWinRate = blackPercentage + drawPercentage / 2;
-            metricToSortBy = !currentTurnIsWhite ? adjustedWinRate : thirdNumber;
-        }
+// Determine adjustedWinRate and metricToSortBy for each mode
+if (sortingMode === 'default') {
+    metricToSortBy = thirdNumber;
+} else if (sortingMode === 'white') {
+    adjustedWinRate = winPercentage + drawPercentage / 2;
+    metricToSortBy = adjustedWinRate;
+} else if (sortingMode === 'black') {
+    adjustedWinRate = blackPercentage + drawPercentage / 2;
+    metricToSortBy = adjustedWinRate;
+} else if (sortingMode === 'white-alternating') {
+    adjustedWinRate = winPercentage + drawPercentage / 2;
+    metricToSortBy = currentTurnIsWhite ? adjustedWinRate : thirdNumber;
+} else if (sortingMode === 'black-alternating') {
+    adjustedWinRate = blackPercentage + drawPercentage / 2;
+    metricToSortBy = !currentTurnIsWhite ? adjustedWinRate : thirdNumber;
+} else if (sortingMode === 'both-alternating') {
+    // Assign metricToSortBy based on turn, ensuring a value is always set
+    if (currentTurnIsWhite) {
+        adjustedWinRate = winPercentage + drawPercentage / 2;
+        metricToSortBy = adjustedWinRate;
+    } else {
+        adjustedWinRate = blackPercentage + drawPercentage / 2;
+        metricToSortBy = adjustedWinRate;
+    }
+} else {
+    // Fallback for unexpected mode values
+    metricToSortBy = thirdNumber;
+}
 
-        // Calculate the custom metric with the updated formula
-        const customMetric = metricToSortBy * Math.pow((1 - Math.pow(10, -(thirdNumber / Math.pow(10, sliderValue)))), 1 / exponentSliderValue);
+// Calculate the custom metric with fallback to thirdNumber if not sorting
+const customMetric = (sortingMode !== 'default')
+    ? ((metricToSortBy * thirdNumber) / (thirdNumber + winrateOffset))
+      * Math.pow((1 - Math.pow(10, -(thirdNumber / Math.pow(10, sliderValue)))), 1 / exponentSliderValue)
+    : thirdNumber;
+
 
         return { row, adjustedWinRate, customMetric };
     });
@@ -185,10 +204,19 @@ function calculateAndSortByCustomMetric() {
         lastAdjustedWinRate = currentTurnIsWhite ? lastWinPercentage + lastDrawPercentage / 2 : lastThirdNumber;
     } else if (sortingMode === 'black-alternating') {
         lastAdjustedWinRate = !currentTurnIsWhite ? lastBlackPercentage + lastDrawPercentage / 2 : lastThirdNumber;
+    } else if (sortingMode === 'both-alternating') {
+        lastAdjustedWinRate = currentTurnIsWhite
+            ? (lastWinPercentage + lastDrawPercentage / 2)
+            : (lastBlackPercentage + lastDrawPercentage / 2);
+    } else {
+        lastAdjustedWinRate = lastThirdNumber; // Default to third number if sorting mode is unclear
     }
 
-    // Calculate custom metric for the last row with the new formula
-    const lastCustomMetric = lastAdjustedWinRate * Math.pow((1 - Math.pow(10, -(lastThirdNumber / Math.pow(10, sliderValue)))), 1 / exponentSliderValue);
+    // Calculate custom metric for the last row with the new formula or default to third number
+    const lastCustomMetric = (sortingMode !== 'default')
+        ? ((lastAdjustedWinRate * lastThirdNumber) / (lastThirdNumber + winrateOffset))
+          * Math.pow((1 - Math.pow(10, -(lastThirdNumber / Math.pow(10, sliderValue)))), 1 / exponentSliderValue)
+        : lastThirdNumber;
 
     lastMetricCell.textContent = `Adjusted Win Rate: ${lastAdjustedWinRate.toFixed(2)}% | Custom Metric: ${lastCustomMetric.toFixed(2)}`;
 
@@ -214,7 +242,7 @@ function initializeSliders() {
     lnSlider.id = 'ln-slider';
     lnSlider.min = '0';
     lnSlider.max = '10';
-    lnSlider.value = '4'; // Set default value to 4
+    lnSlider.value = '4'; // Set default value to 3
     lnSlider.step = '0.1';  // Allow for decimal increments
 
     const lnSliderValueDisplay = document.createElement('span');
@@ -240,9 +268,9 @@ function initializeSliders() {
     exponentSlider.type = 'range';
     exponentSlider.id = 'exponent-slider';
     exponentSlider.min = '0';
-    exponentSlider.max = '10';
-    exponentSlider.value = '6'; // Set default value to 6
-    exponentSlider.step = '0.1';  // Allow for decimal increments
+    exponentSlider.max = '100';
+    exponentSlider.value = '10'; // Set default value to 5
+    exponentSlider.step = '1';  // Allow for decimal increments
 
     const exponentSliderValueDisplay = document.createElement('span');
     exponentSliderValueDisplay.id = 'exponent-slider-value';
@@ -257,6 +285,34 @@ function initializeSliders() {
     slidersContainer.appendChild(exponentSliderLabel);
     slidersContainer.appendChild(exponentSlider);
     slidersContainer.appendChild(exponentSliderValueDisplay);
+
+    // Winrate offset slider
+    const winrateOffsetLabel = document.createElement('label');
+    winrateOffsetLabel.textContent = 'Winrate Offset: ';
+    winrateOffsetLabel.style.fontWeight = 'bold';
+    winrateOffsetLabel.style.marginRight = '5px';
+
+    const winrateOffsetSlider = document.createElement('input');
+    winrateOffsetSlider.type = 'range';
+    winrateOffsetSlider.id = 'winrate-offset-slider';
+    winrateOffsetSlider.min = '0';
+    winrateOffsetSlider.max = '10'; // Adjusted max range to 10
+    winrateOffsetSlider.value = '3'; // Set initial default value
+    winrateOffsetSlider.step = '0.1';  // Use decimal steps for precision
+
+    const winrateOffsetValueDisplay = document.createElement('span');
+    winrateOffsetValueDisplay.id = 'winrate-offset-value';
+    winrateOffsetValueDisplay.textContent = winrateOffsetSlider.value;
+
+    winrateOffsetSlider.addEventListener('input', () => {
+        winrateOffsetValueDisplay.textContent = winrateOffsetSlider.value;
+        calculateAndSortByCustomMetric();
+    });
+
+    slidersContainer.appendChild(document.createElement('br'));
+    slidersContainer.appendChild(winrateOffsetLabel);
+    slidersContainer.appendChild(winrateOffsetSlider);
+    slidersContainer.appendChild(winrateOffsetValueDisplay);
 
     // Auto Flip Toggle slider
     const autoFlipLabel = document.createElement('label');
@@ -293,6 +349,7 @@ function initializeSliders() {
         { value: 'black', text: 'Black Sorting' },
         { value: 'white-alternating', text: 'White Alternating' },
         { value: 'black-alternating', text: 'Black Alternating' },
+        { value: 'both-alternating', text: 'Both Alternating' }
     ];
 
     options.forEach(option => {
