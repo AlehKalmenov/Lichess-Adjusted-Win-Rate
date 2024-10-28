@@ -1,14 +1,58 @@
+// Store the current FEN string and setup default values for sliders
+let previousFENString = '';
+let previousMetrics = {};
+let autoFlipEnabled = true; // Default to true
+
 // Function to detect the current turn based on the FEN string
 function isWhiteTurn() {
-    const fenString = document.querySelector('tbody').getAttribute('data-fen');
+    const tbodyElement = document.querySelector('tbody[data-fen]');
+    const fenString = tbodyElement ? tbodyElement.getAttribute('data-fen') : '';
     const turnChar = fenString.split(' ')[1]; // Gets 'w' or 'b'
     return turnChar === 'w';
 }
 
+// Function to detect board orientation and change sorting mode if autoFlipEnabled
+function checkBoardOrientation() {
+    if (!autoFlipEnabled) return;
+
+    const boardElement = document.querySelector('.cg-wrap');
+    const isWhiteOrientation = boardElement && boardElement.classList.contains('orientation-white');
+    const sortingModeSlider = document.getElementById('sorting-mode-slider');
+    const currentMode = sortingModeSlider.value;
+
+    // Toggle sorting mode based on orientation and current mode
+    if (isWhiteOrientation) {
+        if (currentMode === 'black') {
+            sortingModeSlider.value = 'white';
+        } else if (currentMode === 'black-alternating') {
+            sortingModeSlider.value = 'white-alternating';
+        }
+    } else {
+        if (currentMode === 'white') {
+            sortingModeSlider.value = 'black';
+        } else if (currentMode === 'white-alternating') {
+            sortingModeSlider.value = 'black-alternating';
+        }
+    }
+
+    calculateAndSortByCustomMetric();
+}
+
 // Function to calculate and display adjusted win rate and custom metric
 function calculateAndSortByCustomMetric() {
-    const sliderValue = parseFloat(document.getElementById('ln-slider').value);
-    const sortingMode = document.getElementById('sorting-mode-slider').value;
+    const sliderElement = document.getElementById('ln-slider');
+    const exponentSliderElement = document.getElementById('exponent-slider');
+    const sortingModeElement = document.getElementById('sorting-mode-slider');
+
+    // Check if the sliders and sorting mode elements are present
+    if (!sliderElement || !exponentSliderElement || !sortingModeElement) {
+        console.warn("Sliders not initialized yet.");
+        return;
+    }
+
+    const sliderValue = parseFloat(sliderElement.value);
+    const exponentSliderValue = parseFloat(exponentSliderElement.value);
+    const sortingMode = sortingModeElement.value;
     const moveRows = Array.from(document.querySelectorAll('.moves tbody tr[data-uci]'));
 
     // Exclude the last move from sorting
@@ -19,7 +63,7 @@ function calculateAndSortByCustomMetric() {
     const currentTurnIsWhite = isWhiteTurn();
 
     // Array to store moves with adjusted win rate and custom metric values
-    const movesWithMetric = rowsToSort.map((row, index) => {
+    const movesWithMetric = rowsToSort.map((row) => {
         const winPercentageText = row.querySelector('.white').style.width;
         const drawPercentageText = row.querySelector('.draws').style.width;
         const blackPercentageText = row.querySelector('.black').style.width;
@@ -36,7 +80,6 @@ function calculateAndSortByCustomMetric() {
         let metricToSortBy;
 
         if (sortingMode === 'default') {
-            // Default sorts by the third number
             metricToSortBy = thirdNumber;
         } else if (sortingMode === 'white') {
             adjustedWinRate = winPercentage + drawPercentage / 2;
@@ -52,11 +95,23 @@ function calculateAndSortByCustomMetric() {
             metricToSortBy = !currentTurnIsWhite ? adjustedWinRate : thirdNumber;
         }
 
-        // Calculate the custom metric
-        const customMetric = metricToSortBy * (1 - (1 / Math.log(thirdNumber + 1)) * Math.log(sliderValue));
+        // Calculate the custom metric with the updated formula
+        const customMetric = metricToSortBy * Math.pow((1 - Math.pow(10, -(thirdNumber / Math.pow(10, sliderValue)))), 1 / exponentSliderValue);
 
         return { row, adjustedWinRate, customMetric };
     });
+
+    // Check if there is any change in metrics
+    const metricsChanged = movesWithMetric.some((metric, idx) => {
+        const prevMetric = previousMetrics[idx];
+        return !prevMetric || metric.customMetric !== prevMetric.customMetric || metric.adjustedWinRate !== prevMetric.adjustedWinRate;
+    });
+
+    // If no changes, skip the update
+    if (!metricsChanged) return;
+
+    // Update previous metrics for the next comparison
+    previousMetrics = movesWithMetric.map(({ adjustedWinRate, customMetric }) => ({ adjustedWinRate, customMetric }));
 
     // Sort the moves by the custom metric in descending order
     movesWithMetric.sort((a, b) => b.customMetric - a.customMetric);
@@ -132,7 +187,9 @@ function calculateAndSortByCustomMetric() {
         lastAdjustedWinRate = !currentTurnIsWhite ? lastBlackPercentage + lastDrawPercentage / 2 : lastThirdNumber;
     }
 
-    const lastCustomMetric = lastAdjustedWinRate * (1 - (1 / Math.log(lastThirdNumber + 1)) * Math.log(sliderValue));
+    // Calculate custom metric for the last row with the new formula
+    const lastCustomMetric = lastAdjustedWinRate * Math.pow((1 - Math.pow(10, -(lastThirdNumber / Math.pow(10, sliderValue)))), 1 / exponentSliderValue);
+
     lastMetricCell.textContent = `Adjusted Win Rate: ${lastAdjustedWinRate.toFixed(2)}% | Custom Metric: ${lastCustomMetric.toFixed(2)}`;
 
     lastMetricRow.appendChild(lastMetricCell);
@@ -143,7 +200,6 @@ function calculateAndSortByCustomMetric() {
 
 // Function to initialize the sliders at the bottom of the page
 function initializeSliders() {
-    // Create a container for the sliders at the bottom of the page
     const slidersContainer = document.createElement('div');
     slidersContainer.style.marginTop = '20px';
 
@@ -156,10 +212,10 @@ function initializeSliders() {
     const lnSlider = document.createElement('input');
     lnSlider.type = 'range';
     lnSlider.id = 'ln-slider';
-    lnSlider.min = '1';
+    lnSlider.min = '0';
     lnSlider.max = '10';
-    lnSlider.value = '2';
-    lnSlider.step = '0.1';
+    lnSlider.value = '4'; // Set default value to 4
+    lnSlider.step = '0.1';  // Allow for decimal increments
 
     const lnSliderValueDisplay = document.createElement('span');
     lnSliderValueDisplay.id = 'ln-slider-value';
@@ -173,6 +229,54 @@ function initializeSliders() {
     slidersContainer.appendChild(lnSliderLabel);
     slidersContainer.appendChild(lnSlider);
     slidersContainer.appendChild(lnSliderValueDisplay);
+
+    // Exponent multiplier slider
+    const exponentSliderLabel = document.createElement('label');
+    exponentSliderLabel.textContent = 'Adjust exponent multiplier: ';
+    exponentSliderLabel.style.fontWeight = 'bold';
+    exponentSliderLabel.style.marginRight = '5px';
+
+    const exponentSlider = document.createElement('input');
+    exponentSlider.type = 'range';
+    exponentSlider.id = 'exponent-slider';
+    exponentSlider.min = '0';
+    exponentSlider.max = '10';
+    exponentSlider.value = '6'; // Set default value to 6
+    exponentSlider.step = '0.1';  // Allow for decimal increments
+
+    const exponentSliderValueDisplay = document.createElement('span');
+    exponentSliderValueDisplay.id = 'exponent-slider-value';
+    exponentSliderValueDisplay.textContent = exponentSlider.value;
+
+    exponentSlider.addEventListener('input', () => {
+        exponentSliderValueDisplay.textContent = exponentSlider.value;
+        calculateAndSortByCustomMetric();
+    });
+
+    slidersContainer.appendChild(document.createElement('br'));
+    slidersContainer.appendChild(exponentSliderLabel);
+    slidersContainer.appendChild(exponentSlider);
+    slidersContainer.appendChild(exponentSliderValueDisplay);
+
+    // Auto Flip Toggle slider
+    const autoFlipLabel = document.createElement('label');
+    autoFlipLabel.textContent = 'Enable Auto Flip: ';
+    autoFlipLabel.style.fontWeight = 'bold';
+    autoFlipLabel.style.marginRight = '5px';
+
+    const autoFlipSlider = document.createElement('input');
+    autoFlipSlider.type = 'checkbox';
+    autoFlipSlider.id = 'auto-flip-slider';
+    autoFlipSlider.checked = true; // Enabled by default
+
+    autoFlipSlider.addEventListener('change', () => {
+        autoFlipEnabled = autoFlipSlider.checked;
+        if (autoFlipEnabled) checkBoardOrientation();
+    });
+
+    slidersContainer.appendChild(document.createElement('br'));
+    slidersContainer.appendChild(autoFlipLabel);
+    slidersContainer.appendChild(autoFlipSlider);
 
     // Sorting mode slider
     const sortingModeLabel = document.createElement('label');
@@ -198,7 +302,7 @@ function initializeSliders() {
         sortingModeSlider.appendChild(opt);
     });
 
-    sortingModeSlider.value = 'white-alternating'; // Set default to White Alternating
+    sortingModeSlider.value = 'white-alternating';
 
     sortingModeSlider.addEventListener('change', () => {
         calculateAndSortByCustomMetric();
@@ -207,11 +311,31 @@ function initializeSliders() {
     slidersContainer.appendChild(document.createElement('br'));
     slidersContainer.appendChild(sortingModeLabel);
     slidersContainer.appendChild(sortingModeSlider);
-
-    // Append slidersContainer at the end of the page
     document.body.appendChild(slidersContainer);
+
+    // Initial call to update metrics after sliders are loaded
+    calculateAndSortByCustomMetric();
 }
 
-// Initialize the sliders and set up repeated calculation and sorting
-initializeSliders();
-setInterval(calculateAndSortByCustomMetric, 300); // Run every 300ms
+// Continuously check for FEN changes and board orientation
+function checkFENAndOrientationChanges() {
+    function recursiveCheck() {
+        const tbodyElement = document.querySelector('tbody[data-fen]');
+        const currentFENString = tbodyElement ? tbodyElement.getAttribute('data-fen') : '';
+
+        if (currentFENString !== previousFENString) {
+            previousFENString = currentFENString;
+            calculateAndSortByCustomMetric();
+        }
+
+        checkBoardOrientation(); // Check and adjust sorting mode based on orientation
+        requestAnimationFrame(recursiveCheck); // Continue looping without setInterval
+    }
+    recursiveCheck();
+}
+
+// Initialize sliders and set up FEN and orientation check loop
+window.onload = () => {
+    initializeSliders();
+    checkFENAndOrientationChanges(); // Start continuous FEN and orientation checking
+};
