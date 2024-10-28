@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Lichess Adjusted Win Rate",
+  "version": "1.0",
+  "description": "Display adjusted win rate in Lichess analysis.",
+  "permissions": ["scripting"],
+  "content_scripts": [
+    {
+      "matches": ["https://lichess.org/analysis*"],
+      "js": ["content.js"]
+    }
+  ]
+}
