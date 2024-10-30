@@ -1,4 +1,4 @@
-// Store the current FEN string and setup default values for sliders
+// Store the current FEN string and setup default values for sliders 
 let previousFENString = '';
 let previousMetrics = {};
 let autoFlipEnabled = true; // Default to true
@@ -66,6 +66,7 @@ function calculateAndSortByCustomMetric() {
 
     // Array to store moves with adjusted win rate and custom metric values
     const movesWithMetric = rowsToSort.map((row) => {
+        const firstText = row.children[0].textContent; // Assuming first text is in the first cell
         const winPercentageText = row.querySelector('.white').style.width;
         const drawPercentageText = row.querySelector('.draws').style.width;
         const blackPercentageText = row.querySelector('.black').style.width;
@@ -75,49 +76,45 @@ function calculateAndSortByCustomMetric() {
         const winPercentage = parseFloat(winPercentageText);
         const drawPercentage = parseFloat(drawPercentageText);
         const blackPercentage = parseFloat(blackPercentageText);
-        const thirdNumber = parseFloat(thirdNumberText);
+        const thirdNumber = parseFloat(thirdNumberText) || 0;  // Define default value of 0 if undefined
 
-// Calculate adjusted win rate and metric to sort by based on sorting mode
-let adjustedWinRate;
-let metricToSortBy;
+        // Calculate adjusted win rate and metric to sort by based on sorting mode
+        let adjustedWinRate;
+        let metricToSortBy;
 
-// Determine adjustedWinRate and metricToSortBy for each mode
-if (sortingMode === 'default') {
-    metricToSortBy = thirdNumber;
-} else if (sortingMode === 'white') {
-    adjustedWinRate = winPercentage + drawPercentage / 2;
-    metricToSortBy = adjustedWinRate;
-} else if (sortingMode === 'black') {
-    adjustedWinRate = blackPercentage + drawPercentage / 2;
-    metricToSortBy = adjustedWinRate;
-} else if (sortingMode === 'white-alternating') {
-    adjustedWinRate = winPercentage + drawPercentage / 2;
-    metricToSortBy = currentTurnIsWhite ? adjustedWinRate : thirdNumber;
-} else if (sortingMode === 'black-alternating') {
-    adjustedWinRate = blackPercentage + drawPercentage / 2;
-    metricToSortBy = !currentTurnIsWhite ? adjustedWinRate : thirdNumber;
-} else if (sortingMode === 'both-alternating') {
-    // Assign metricToSortBy based on turn, ensuring a value is always set
-    if (currentTurnIsWhite) {
-        adjustedWinRate = winPercentage + drawPercentage / 2;
-        metricToSortBy = adjustedWinRate;
-    } else {
-        adjustedWinRate = blackPercentage + drawPercentage / 2;
-        metricToSortBy = adjustedWinRate;
-    }
-} else {
-    // Fallback for unexpected mode values
-    metricToSortBy = thirdNumber;
-}
+        if (sortingMode === 'default') {
+            metricToSortBy = thirdNumber;
+        } else if (sortingMode === 'white') {
+            adjustedWinRate = winPercentage + drawPercentage / 2;
+            metricToSortBy = adjustedWinRate;
+        } else if (sortingMode === 'black') {
+            adjustedWinRate = blackPercentage + drawPercentage / 2;
+            metricToSortBy = adjustedWinRate;
+        } else if (sortingMode === 'white-alternating') {
+            adjustedWinRate = winPercentage + drawPercentage / 2;
+            metricToSortBy = currentTurnIsWhite ? adjustedWinRate : thirdNumber;
+        } else if (sortingMode === 'black-alternating') {
+            adjustedWinRate = blackPercentage + drawPercentage / 2;
+            metricToSortBy = !currentTurnIsWhite ? adjustedWinRate : thirdNumber;
+        } else if (sortingMode === 'both-alternating') {
+            if (currentTurnIsWhite) {
+                adjustedWinRate = winPercentage + drawPercentage / 2;
+                metricToSortBy = adjustedWinRate;
+            } else {
+                adjustedWinRate = blackPercentage + drawPercentage / 2;
+                metricToSortBy = adjustedWinRate;
+            }
+        } else {
+            metricToSortBy = thirdNumber;
+        }
 
-// Calculate the custom metric with fallback to thirdNumber if not sorting
-const customMetric = (sortingMode !== 'default')
-    ? ((metricToSortBy * thirdNumber) / (thirdNumber + winrateOffset))
-      * Math.pow((1 - Math.pow(10, -(thirdNumber / Math.pow(10, sliderValue)))), 1 / exponentSliderValue)
-    : thirdNumber;
+        // Calculate the custom metric with fallback to thirdNumber if not sorting
+        const customMetric = (sortingMode !== 'default')
+            ? ((metricToSortBy * thirdNumber) / (thirdNumber + winrateOffset))
+              * Math.pow((1 - Math.pow(10, -(thirdNumber / Math.pow(10, sliderValue)))), 1 / exponentSliderValue)
+            : thirdNumber;
 
-
-        return { row, adjustedWinRate, customMetric };
+        return { row, firstText, adjustedWinRate, thirdNumber, customMetric };
     });
 
     // Check if there is any change in metrics
@@ -130,7 +127,7 @@ const customMetric = (sortingMode !== 'default')
     if (!metricsChanged) return;
 
     // Update previous metrics for the next comparison
-    previousMetrics = movesWithMetric.map(({ adjustedWinRate, customMetric }) => ({ adjustedWinRate, customMetric }));
+    previousMetrics = movesWithMetric.map(({ adjustedWinRate, thirdNumber, customMetric }) => ({ adjustedWinRate, thirdNumber, customMetric }));
 
     // Sort the moves by the custom metric in descending order
     movesWithMetric.sort((a, b) => b.customMetric - a.customMetric);
@@ -139,7 +136,7 @@ const customMetric = (sortingMode !== 'default')
     const tableBody = document.querySelector('.moves tbody');
     tableBody.innerHTML = ''; // Clear current rows
 
-    movesWithMetric.forEach(({ row, adjustedWinRate, customMetric }) => {
+    movesWithMetric.forEach(({ row, firstText, adjustedWinRate, thirdNumber, customMetric }) => {
         // Insert the sorted row
         tableBody.appendChild(row);
 
@@ -159,7 +156,7 @@ const customMetric = (sortingMode !== 'default')
         metricCell.style.userSelect = 'text';
         metricCell.style.cursor = 'text';
         metricCell.style.borderBottom = '2px solid black';
-        metricCell.textContent = `Adjusted Win Rate: ${adjustedWinRate.toFixed(2)}% | Custom Metric: ${customMetric.toFixed(2)}`;
+        metricCell.textContent = `${firstText} | ${adjustedWinRate.toFixed(2)}% | ${thirdNumber} | ${customMetric.toFixed(2)}`;
 
         metricRow.appendChild(metricCell);
         tableBody.appendChild(metricRow); // Append the new row right after the move row
@@ -183,6 +180,7 @@ const customMetric = (sortingMode !== 'default')
     lastMetricCell.style.cursor = 'text';
     lastMetricCell.style.borderBottom = '2px solid black';
 
+    const lastFirstText = lastRow.children[0].textContent; // Assuming first text is in the first cell of the last row
     const lastWinPercentageText = lastRow.querySelector('.white').style.width;
     const lastDrawPercentageText = lastRow.querySelector('.draws').style.width;
     const lastBlackPercentageText = lastRow.querySelector('.black').style.width;
@@ -190,7 +188,7 @@ const customMetric = (sortingMode !== 'default')
     const lastWinPercentage = parseFloat(lastWinPercentageText);
     const lastDrawPercentage = parseFloat(lastDrawPercentageText);
     const lastBlackPercentage = parseFloat(lastBlackPercentageText);
-    const lastThirdNumber = parseFloat(lastThirdNumberText);
+    const lastThirdNumber = parseFloat(lastThirdNumberText) || 0; // Default value if undefined
 
     // Calculate adjusted win rate and custom metric for the last row based on sorting mode
     let lastAdjustedWinRate;
@@ -209,7 +207,7 @@ const customMetric = (sortingMode !== 'default')
             ? (lastWinPercentage + lastDrawPercentage / 2)
             : (lastBlackPercentage + lastDrawPercentage / 2);
     } else {
-        lastAdjustedWinRate = lastThirdNumber; // Default to third number if sorting mode is unclear
+        lastAdjustedWinRate = lastThirdNumber;
     }
 
     // Calculate custom metric for the last row with the new formula or default to third number
@@ -218,14 +216,13 @@ const customMetric = (sortingMode !== 'default')
           * Math.pow((1 - Math.pow(10, -(lastThirdNumber / Math.pow(10, sliderValue)))), 1 / exponentSliderValue)
         : lastThirdNumber;
 
-    lastMetricCell.textContent = `Adjusted Win Rate: ${lastAdjustedWinRate.toFixed(2)}% | Custom Metric: ${lastCustomMetric.toFixed(2)}`;
+    lastMetricCell.textContent = `${lastFirstText} | ${lastAdjustedWinRate.toFixed(2)}% | ${lastThirdNumber} | ${lastCustomMetric.toFixed(2)}`;
 
     lastMetricRow.appendChild(lastMetricCell);
     tableBody.appendChild(lastMetricRow);
 
     console.log("Moves sorted by custom metric and sorting mode, displaying both metrics, excluding the last button.");
 }
-
 // Function to initialize the sliders at the bottom of the page
 function initializeSliders() {
     const slidersContainer = document.createElement('div');
@@ -242,7 +239,7 @@ function initializeSliders() {
     lnSlider.id = 'ln-slider';
     lnSlider.min = '0';
     lnSlider.max = '10';
-    lnSlider.value = '4'; // Set default value to 3
+    lnSlider.value = '4'; // Set default value to 4
     lnSlider.step = '0.1';  // Allow for decimal increments
 
     const lnSliderValueDisplay = document.createElement('span');
